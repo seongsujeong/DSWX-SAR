@@ -484,16 +484,17 @@ def run(cfg):
                         stat.set_reference_data(dswx_hls_file)
                         refname_base = os.path.splitext(os.path.basename(dswx_hls_file))[0]
                         clsname_base = os.path.splitext(os.path.basename(water_s1_path))[0]
-
+                        ignore_cls_values = [251, 252, 253, 254, 250,]
+                        ignore_ref_values = [9, 251, 252, 253, 254, 255]
                         # open water vs no-water (DSWX-S1)
                         # open water vs no-water (DSWx-HLS)
                         stat.compute_accuracy(
                             cls_positive_values=[1],
-                            cls_negative_values=[0, 5, 6],
-                            cls_ignore_values=[251, 254, 250, 3],
+                            cls_negative_values=[0, 5, 6, 3],
+                            cls_ignore_values=ignore_cls_values,
                             ref_positive_values=[1],
-                            ref_negative_values=[0],
-                            ref_ignore_values=[9, 253])
+                            ref_negative_values=[0, 2],
+                            ref_ignore_values=ignore_ref_values)
 
                         output_filename = f'{sas_outputdir}/acc_log_openwater_{clsname_base}_{refname_base}.txt'
                         stat.create_comparison_log(output_filename)
@@ -508,10 +509,10 @@ def run(cfg):
                         stat.compute_accuracy(
                             cls_positive_values=[3],
                             cls_negative_values=[0, 5, 6, 1],
-                            cls_ignore_values=[250, 251, 252, 253, 254, 255],
+                            cls_ignore_values=ignore_cls_values,
                             ref_positive_values=[2],
                             ref_negative_values=[0, 1],
-                            ref_ignore_values=[9, 250, 251, 252, 253, 254, 255])
+                            ref_ignore_values=ignore_ref_values)
 
                         output_filename = f'{sas_outputdir}/acc_log_inundated_{clsname_base}_{refname_base}.txt'
                         stat.create_comparison_log(output_filename)
@@ -527,10 +528,10 @@ def run(cfg):
                         stat.compute_accuracy(
                             cls_positive_values=[1, 3],
                             cls_negative_values=[0, 5, 6],
-                            cls_ignore_values=[250, 251, 254],
+                            cls_ignore_values=ignore_cls_values,
                             ref_positive_values=[1, 2],
                             ref_negative_values=[0],
-                            ref_ignore_values=[9, 253])
+                            ref_ignore_values=ignore_ref_values)
 
                         output_filename = f'{sas_outputdir}/acc_log_all_water_{clsname_base}_{refname_base}.txt'
                         stat.create_comparison_log(output_filename)
