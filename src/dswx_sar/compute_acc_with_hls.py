@@ -406,8 +406,9 @@ def download_dswx_hls(polys,
                     download_file = f'{download_folder}/{dswx_hls_filename}'
 
                     if not os.path.isfile(download_file):
+                        download_req_header = {"Authorization": f"Bearer {ebt}"} if ebt else None
                         response = requests.get(dswx_hls_url, stream=True,
-                                                headers={"Authorization": f"Bearer {ebt}"})
+                                                headers=download_req_header)
 
                     # Check if the request was successful
                         if response.status_code == 200:
