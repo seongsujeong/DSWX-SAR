@@ -15,7 +15,7 @@ import shapely
 from shapely.geometry import LinearRing, Point, Polygon, box
 import rasterio
 import requests
-import dswx_sar_util
+from dswx_sar import dswx_sar_util
 
 def createParser():
     parser = argparse.ArgumentParser(
