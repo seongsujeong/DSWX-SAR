@@ -601,6 +601,10 @@ def process_dark_land_component(args):
 
     # # Assign the datasets to their respective variables
     # landcover, bands, ref_land, water_label = raster_datasets
+    if bands_block.ndim == 2:
+        bands_block = np.reshape(bands_block, [1, 
+                                               bands_block.shape[0],
+                                               bands_block.shape[1]])
     bands = bands_block[pol_ind, 
                         y_off-startline:y_off+height-startline,
                         x_off:x_off+width]
@@ -737,12 +741,15 @@ def process_bright_water_component(args):
 
     window = Window(x_off, y_off, width, height)
 
-    # image_paths = [landcover_str,
-    #                output_water_str,
-    #                ]
+    if bands_block.ndim == 2:
+        bands_block = np.reshape(bands_block, [1, 
+                                               bands_block.shape[0],
+                                               bands_block.shape[1]])
+
     bands = bands_block[pol_ind, 
                         y_off-startline:y_off+height-startline,
                         x_off:x_off+width]
+
     ref_land = ref_land_block[y_off-startline:y_off+height-startline,
                               x_off:x_off+width]
     landcover = landcover_block[

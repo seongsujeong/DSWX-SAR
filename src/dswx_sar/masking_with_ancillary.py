@@ -193,6 +193,10 @@ def check_water_land_mixture(args):
     i, size, minimum_pixel, bounds, int_linear_block, water_label_block, \
         water_mask_block, pol_ind = args
 
+    if int_linear_block.ndim == 2:
+        int_linear_block = np.reshape(int_linear_block, [1, 
+                                                         int_linear_block.shape[0],
+                                                         int_linear_block.shape[1]])
     int_linear = int_linear_block[pol_ind, bounds[2]:bounds[3], bounds[0]:bounds[1]]
     water_label = water_label_block[bounds[2]:bounds[3], bounds[0]:bounds[1]]
     water_mask = water_mask_block[bounds[2]:bounds[3], bounds[0]:bounds[1]].copy()
@@ -478,6 +482,7 @@ def split_extended_water_parallel(
             # bright water vs dark water
             # water vs land
             # Prepare arguments for parallel processing
+            print('polindex', pol_ind)
             args_list = [(filtered_index[i], filtered_sizes[i],
                           minimum_pixel, filtered_coord_list[i],
                           intensity_block,
