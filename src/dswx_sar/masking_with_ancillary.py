@@ -482,7 +482,6 @@ def split_extended_water_parallel(
             # bright water vs dark water
             # water vs land
             # Prepare arguments for parallel processing
-            print('polindex', pol_ind)
             args_list = [(filtered_index[i], filtered_sizes[i],
                           minimum_pixel, filtered_coord_list[i],
                           intensity_block,

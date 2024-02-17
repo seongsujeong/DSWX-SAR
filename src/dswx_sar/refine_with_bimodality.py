@@ -7,8 +7,6 @@ import time
 import cv2
 from joblib import Parallel, delayed
 import numpy as np
-import rasterio
-from rasterio.windows import Window
 import scipy
 from scipy import ndimage, stats
 from scipy.optimize import curve_fit
@@ -75,16 +73,21 @@ class BimodalityMetrics:
         # If the threshold is too low,
         # then apply multi-threshold algorithm
         if self.threshold_global_otsu < gauss_dist_thres_bound[0]:
-            multithreshold_global_otsu = threshold_multiotsu(int_db)
-            if any(multithreshold_global_otsu >= gauss_dist_thres_bound[0]):
-                self.threshold_global_otsu_ind = \
-                    np.where((multithreshold_global_otsu >
-                              gauss_dist_thres_bound[0]) &
-                             (multithreshold_global_otsu <
-                             gauss_dist_thres_bound[1]))
-                self.threshold_global_otsu = \
-                    multithreshold_global_otsu[
-                        self.threshold_global_otsu_ind[0][0]]
+            try:
+                multithreshold_global_otsu = threshold_multiotsu(int_db)
+                if any(multithreshold_global_otsu >= gauss_dist_thres_bound[0]):
+                    self.threshold_global_otsu_ind = \
+                        np.where((multithreshold_global_otsu >
+                                gauss_dist_thres_bound[0]) &
+                                (multithreshold_global_otsu <
+                                gauss_dist_thres_bound[1]))
+
+                    if self.threshold_global_otsu_ind[0]:
+                        self.threshold_global_otsu = \
+                            multithreshold_global_otsu[
+                                self.threshold_global_otsu_ind[0][0]]
+            except ValueError:
+                logger.info('multiotsu method failed.')
 
         self.prob = self.counts * self.binstep
 
@@ -134,7 +137,6 @@ class BimodalityMetrics:
         except:
             logger.info(f'Bimodal curve Fitting fails in BimodalityMetrics.')
             self.optimization = False
-
 
     def gauss(self, array, mu, sigma, amplitude):
         """ Calculate the value of a Gaussian (normal) function.
@@ -222,7 +224,6 @@ class BimodalityMetrics:
         bhc_coeff = np.sum(np.sqrt(simul_all_norm * counts_norm))
         return bhc_coeff
 
-
     def compute_surface_ratio(self):
         """Compute the Surface Ratio coefficient
         for bimodality estimation.
@@ -306,7 +307,6 @@ class BimodalityMetrics:
             sigma_b, _ = estimate_bimodality(self.int_db)
 
         return sigma_b
-
 
     def compute_metric(self,
                        ashman_flag=True,
@@ -396,7 +396,7 @@ class BimodalityMetrics:
         Calculate bimodality metrics based on the optimization flag.
 
         Returns:
-            list: A list containing bimodality metrics. 
+            list: A list containing bimodality metrics.
             The list has the following elements:
                 - ashman (float): The Ashman coefficient.
                 - bhc (float): The Bhattacharyya coefficient.
@@ -485,11 +485,12 @@ def estimate_bimodality(array,
             if left_sum > 0 and right_sum > 0:
                 if np.any(cand_left):
                     meanp_left = \
-                        np.nansum(counts_smooth[cand_left] * bincenter[cand_left]) \
+                        np.nansum(counts_smooth[cand_left] *
+                                  bincenter[cand_left]) \
                         / left_sum
                     stdp_left = np.sqrt(np.nansum(
                         ((counts_smooth[cand_left] * bincenter[cand_left])
-                        - meanp_left )**2)) / left_sum
+                         - meanp_left)**2)) / left_sum
                     probp_left = np.nansum(counts_smooth[cand_left]) / countsum
 
                 else:
@@ -497,12 +498,15 @@ def estimate_bimodality(array,
 
                 if np.any(cand_right):
                     meanp_right = \
-                        np.nansum(counts_smooth[cand_right] * bincenter[cand_right]) \
+                        np.nansum(counts_smooth[cand_right] *
+                                  bincenter[cand_right]) \
                         / right_sum
                     stdp_right = np.sqrt(np.nansum(
-                        ((counts_smooth[cand_right] * bincenter[cand_right])
-                        - meanp_right )**2)) / right_sum
-                    probp_right = np.nansum(counts_smooth[cand_right]) / countsum
+                        ((counts_smooth[cand_right] *
+                          bincenter[cand_right]) -
+                         meanp_right)**2)) / right_sum
+                    probp_right = \
+                        np.nansum(counts_smooth[cand_right]) / countsum
                 else:
                     meanp_right, stdp_right, probp_right = 0, 0, 0
 
@@ -568,44 +572,24 @@ def process_dark_land_component(args):
               containing metric output
               values if debug_mode is True, otherwise, it contains zeros.
     """
-    (i, sizes, bounds, ref_land_block, landcover_block, pol_ind, bands_block,
-     water_label_block, thresholds, minimum_pixel, debug_mode, startline, blocksize) = args
-    if bounds[3] > blocksize+startline:
-        bounds[3] = blocksize+startline
-    if bounds[2] < startline:
-        bounds[2] = startline
+    (i, sizes, bounds, ref_land_block, landcover_block,
+     pol_ind, bands_block, water_label_block, thresholds,
+     minimum_pixel, debug_mode, startline, blocksize) = args
+
+    bounds[3] = min(bounds[3], blocksize+startline)
+    bounds[2] = max(bounds[2], startline)
     # bounding box covering the water
     x_off, _, y_off, _ = bounds
     width = bounds[1] - bounds[0]
     height = bounds[3] - bounds[2]
-    # window = Window(row, col, width, height)
-
-    # Define the list of file paths
-    # file_paths = [landcover_str, bands_str,
-    #               ref_land_str, water_label_str]
-
-    # Initialize an empty list to store the raster datasets
-    # raster_datasets = []
-
-    # Read subsets of raster datasets using a loop
-    # for file_path in file_paths:
-    #     with rasterio.open(file_path) as src:
-    #         raster_subset = src.read(window=window)
-    #         # The method 'rasterio with window' returns 3 dimension array even
-    #         # though the file has 2 dimension.
-    #         if raster_subset.shape[0] == 1 and raster_subset.ndim == 3:
-    #             raster_subset = np.reshape(raster_subset,
-    #                                        [raster_subset.shape[1],
-    #                                         raster_subset.shape[2]])
-    #         raster_datasets.append(raster_subset)
 
     # # Assign the datasets to their respective variables
     # landcover, bands, ref_land, water_label = raster_datasets
     if bands_block.ndim == 2:
-        bands_block = np.reshape(bands_block, [1, 
+        bands_block = np.reshape(bands_block, [1,
                                                bands_block.shape[0],
                                                bands_block.shape[1]])
-    bands = bands_block[pol_ind, 
+    bands = bands_block[pol_ind,
                         y_off-startline:y_off+height-startline,
                         x_off:x_off+width]
     ref_land = ref_land_block[y_off-startline:y_off+height-startline,
@@ -616,7 +600,7 @@ def process_dark_land_component(args):
     water_label = water_label_block[
         y_off-startline:y_off+height-startline,
         x_off:x_off+width]
-    
+
     if bands.ndim == 2:
         bands = bands[np.newaxis, :, :]
     # Identify out of boundary areas.
@@ -629,7 +613,7 @@ def process_dark_land_component(args):
     # water mask == 1 represents areas where water is located from
     # previous step. landcover == 0  is the no-data area
     # (landcover != 0)) may need to be added
-    mask = np.array((watermask==1))
+    mask = np.array((watermask == 1))
 
     # ref_land consists of 0 and 1 values
     ref_land_masked = ref_land[mask]
@@ -646,15 +630,15 @@ def process_dark_land_component(args):
             if margin == 0:
                 margin = 1
             # apply dilation to binary image
-            mask_buffer = ndimage.binary_dilation(watermask==1,
+            mask_buffer = ndimage.binary_dilation(watermask == 1,
                                                   iterations=margin,
                                                   mask=out_boundary)
             single_band = bands[pol_ind, ...]
 
             # compute median value for polygons
-            intensity_center = np.nanmedian(single_band[watermask==1])
-            intensity_adjacent_area = single_band[(watermask==0) &
-                                                  (mask_buffer==1)]
+            intensity_center = np.nanmedian(single_band[watermask == 1])
+            intensity_adjacent_area = single_band[(watermask == 0) &
+                                                  (mask_buffer == 1)]
 
             intensity_adjacent_low = np.nanpercentile(intensity_adjacent_area,
                                                       15)
@@ -731,22 +715,18 @@ def process_bright_water_component(args):
         bands_block, ref_land_block, pol_ind, threshold, startline, blocksize = args
 
     # bounding box covering the bright waters
-    if bounds[3] > blocksize+startline:
-        bounds[3] = blocksize+startline
-    if bounds[2] < startline:
-        bounds[2] = startline
-    x_off , _, y_off, _ = bounds
+    bounds[3] = min(bounds[3], blocksize + startline)
+    bounds[2] = max(bounds[2], startline)
+    x_off, _, y_off, _ = bounds
     width = bounds[1] - bounds[0]
     height = bounds[3] - bounds[2]
 
-    window = Window(x_off, y_off, width, height)
-
     if bands_block.ndim == 2:
-        bands_block = np.reshape(bands_block, [1, 
+        bands_block = np.reshape(bands_block, [1,
                                                bands_block.shape[0],
                                                bands_block.shape[1]])
 
-    bands = bands_block[pol_ind, 
+    bands = bands_block[pol_ind,
                         y_off-startline:y_off+height-startline,
                         x_off:x_off+width]
 
@@ -759,10 +739,6 @@ def process_bright_water_component(args):
         y_off-startline:y_off+height-startline,
         x_off:x_off+width]
 
-    if landcover.shape != bands.shape:
-        print(f'sizes, {landcover.shape} {output_water.shape}, {bands.shape}')
-        print('window', x_off, x_off+width, bounds[2], bounds[3])
-        print('sub', x_off, x_off+width, y_off-startline, y_off+height-startline)
     # Find areas where is within entire image boundary and
     # water areas (output_water == 0)
     adjacent_areas = (np.isnan(np.sum(bands, axis=0)) == 0) & \
@@ -828,7 +804,8 @@ def remove_false_water_bimodality_parallel(water_mask_path,
     outputdir: str
         Directory where the output images and metrics are saved.
     meta_info: dict
-        Contains metadata of the input image such as 'geotransform' and 'projection'.
+        Contains metadata of the input image such as
+        'geotransform' and 'projection'.
     input_dict: dict
         Additional inputs required for processing.
         Must contain keys like 'ref_land',
@@ -859,7 +836,7 @@ def remove_false_water_bimodality_parallel(water_mask_path,
                            input_lines_per_block*3,
                            input_lines_per_block*20,
                            rows]
-                           
+
     data_shape = [rows, cols]
     pad_shape = (0, 0)
 
@@ -878,8 +855,9 @@ def remove_false_water_bimodality_parallel(water_mask_path,
 
         for block_ind, block_param in enumerate(block_params):
 
-            logger.info(f'remove_false_water_bimodality_parallel block #{block_ind} '
-                        f'from {block_param.read_start_line} to  '
+            logger.info(f'remove_false_water_bimodality_parallel '
+                        f'block #{block_ind} from '
+                        f'{block_param.read_start_line} to '
                         f'{block_param.read_start_line + block_param.read_length}')
 
             water_mask = dswx_sar_util.get_raster_block(
@@ -906,12 +884,14 @@ def remove_false_water_bimodality_parallel(water_mask_path,
                 datatype='int32',
                 cog_flag=True,
                 scratch_dir=outputdir)
+
             intensity_block = dswx_sar_util.get_raster_block(
                 input_dict['intensity'], block_param)
             landcover_block = dswx_sar_util.get_raster_block(
                 input_dict['landcover'], block_param)
             refland_block = dswx_sar_util.get_raster_block(
                 input_dict['ref_land'], block_param)
+
             bimodality_set = []
 
             # sizes are last column and
@@ -954,12 +934,14 @@ def remove_false_water_bimodality_parallel(water_mask_path,
                 if pol in ['VV', 'VH', 'HH', 'HV']:
                     logger.info(f'removing false water using bimodality for {pol}')
                     # 1 dimensional array for bimodality values
-                    bimodality_output = np.zeros([nb_components_water], dtype='byte')
+                    bimodality_output = np.zeros([nb_components_water], 
+                                                 dtype='byte')
                     check_output = np.ones([len(sizes)], dtype='byte')
 
                     if debug_mode:
                         metric_output = np.zeros([nb_components_water, 5])
-                        ref_land_portion_output = np.zeros([nb_components_water])
+                        ref_land_portion_output = \
+                            np.zeros([nb_components_water])
 
                     args_list = [(component_data[i][0],
                                   component_data[i][1],
@@ -977,7 +959,9 @@ def remove_false_water_bimodality_parallel(water_mask_path,
                                   for i in component_data.keys()]
 
                     with Parallel(n_jobs=number_workers) as parallel:
-                        results = parallel(delayed(process_dark_land_component)(args) for args in args_list)
+                        results = parallel(
+                            delayed(process_dark_land_component)(args)
+                            for args in args_list)
 
                     # Assign results computed in parallel into variables
                     for result in results:
@@ -986,7 +970,8 @@ def remove_false_water_bimodality_parallel(water_mask_path,
                         bimodality_output[bimodal_ind] = bimodality_array_i
                         check_output[bimodal_ind] = 0
                         if debug_mode:
-                            ref_land_portion_output[bimodal_ind] = ref_land_portion_output_i
+                            ref_land_portion_output[bimodal_ind] = \
+                                ref_land_portion_output_i
                             metric_output[bimodal_ind, :] = metric_output_i
                     if nb_components_water > 65535:
                         output_water_type = 'uint32'
@@ -997,7 +982,7 @@ def remove_false_water_bimodality_parallel(water_mask_path,
                     old_val = np.arange(1, nb_components_water + 1) - .1
                     index_array_to_image = np.array(
                         np.searchsorted(old_val, output_water),
-                                        dtype=output_water_type)
+                        dtype=output_water_type)
                     bimodality_output_add = np.insert(bimodality_output, 0, 0,
                                                       axis=0)
                     bimodality_image = np.array(bimodality_output_add[
@@ -1013,10 +998,12 @@ def remove_false_water_bimodality_parallel(water_mask_path,
                     bimodality_set.append(bimodality_image)
 
                     if debug_mode:
-                        ref_land_portion_output = np.insert(ref_land_portion_output, 0, -1, axis=0)
-                        ref_land_portion_image = ref_land_portion_output[index_array_to_image]
+                        ref_land_portion_output = np.insert(
+                            ref_land_portion_output, 0, -1, axis=0)
+                        ref_land_portion_image = ref_land_portion_output[
+                            index_array_to_image]
                         dswx_sar_util.write_raster_block(
-                            os.path.join(outputdir, 'land_portion_{}.tif'.format(pol)),
+                            os.path.join(outputdir, f'land_portion_{pol}.tif'),
                             ref_land_portion_image,
                             block_param,
                             geotransform=meta_info['geotransform'],
@@ -1025,11 +1012,12 @@ def remove_false_water_bimodality_parallel(water_mask_path,
                             cog_flag=True,
                             scratch_dir=outputdir)
 
-                        metric_detail_name = [f'binary_ahman_{pol}.tif',
-                                              f'binary_bhc_{pol}.tif',
-                                              f'binary_asurface_ratio_{pol}.tif',
-                                              f'binary_bm_coeff_{pol}.tif',
-                                              f'binary_bc_coeff_{pol}.tif']
+                        metric_detail_name = [
+                            f'binary_ahman_{pol}.tif',
+                            f'binary_bhc_{pol}.tif',
+                            f'binary_asurface_ratio_{pol}.tif',
+                            f'binary_bm_coeff_{pol}.tif',
+                            f'binary_bc_coeff_{pol}.tif']
 
                         metric_output = np.insert(metric_output, 0, np.zeros([1, 5]), axis=0)
                         for metric_ind, metric_name in enumerate(metric_detail_name):
@@ -1043,15 +1031,19 @@ def remove_false_water_bimodality_parallel(water_mask_path,
                                 datatype='float32',
                                 cog_flag=True,
                                 scratch_dir=outputdir)
-                    del results, bimodality_output_add, bimodality_image, check_output
+                    del results, bimodality_output_add
+                    del bimodality_image, check_output
                     gc.collect()
 
             if {'HH', 'HV', 'VV', 'VH'}.intersection(set(pol_list)):
-                bimodality_total = np.array(np.nansum(bimodality_set, axis=0)>0, dtype='byte')
+                bimodality_total = np.array(
+                    np.nansum(bimodality_set, axis=0) > 0,
+                    dtype='byte')
                 # 0 value in output_water indicates the non-water
-                bimodality_total[output_water==0] = False
+                bimodality_total[output_water == 0] = False
             else:
-                # If the polarization is not in the list ['VV', 'VH', 'HH', 'HV'],
+                # If the polarization is not in the list
+                # ['VV', 'VH', 'HH', 'HV'],
                 # Return input as it is without further modification.
                 bimodality_total = water_mask
             del output_water, bimodality_set
@@ -1068,10 +1060,13 @@ def remove_false_water_bimodality_parallel(water_mask_path,
 
             # Skip saving the checking file in last iteration
             if block_iter < len(lines_per_block_set)-1:
-                # 'check_remove_false_water' has 1 value for unprocessed components
-                # due to its touching the boundaries and has 0 value for processed components.
+                # 'check_remove_false_water' has 1 value
+                # for unprocessed components
+                # due to its touching the boundaries and 
+                # has 0 value for processed components.
                 check_remove_false_water_path = os.path.join(
-                    outputdir, f'check_remove_false_water_{"_".join(pol_list)}_{block_iter}.tif')
+                    outputdir,
+                    f'check_remove_false_water_{"_".join(pol_list)}_{block_iter}.tif')
                 dswx_sar_util.write_raster_block(
                     check_remove_false_water_path,
                     check_image,
@@ -1157,7 +1152,7 @@ def fill_gap_water_bimodality_parallel(
     # carried out with the block first, and entire image will be
     # used for the remained componenets.
     lines_per_block_set = [lines_per_block,
-                           lines_per_block * 20, 
+                           lines_per_block * 20,
                            rows]
     data_shape = [rows, cols]
     pad_shape = (0, 0)
@@ -1174,17 +1169,19 @@ def fill_gap_water_bimodality_parallel(
         removed_bright_water_path = os.path.join(
             outputdir,
             f'{fill_gap_path_prefix}_{pol_str}_{block_iter}.tif')
+
         remove_bright_water_path_set.append(removed_bright_water_path)
 
         for block_ind, block_param in enumerate(block_params):
-            logger.info(f'fill_gap_water_bimodality_parallel block #{block_ind} '
-                        f'from {block_param.read_start_line} to  '
-                        f'{block_param.read_start_line + block_param.read_length}')
+            logger.info(
+                f'fill_gap_water_bimodality_parallel block #{block_ind} '
+                f'from {block_param.read_start_line} to '
+                f'{block_param.read_start_line + block_param.read_length}')
             water_mask = dswx_sar_util.get_raster_block(
                 bright_water_path, block_param)
             out_boundary = dswx_sar_util.get_raster_block(
                 input_dict['no_data'], block_param)
-            water_mask[out_boundary==1] = 0
+            water_mask[out_boundary == 1] = 0
             intensity_block = dswx_sar_util.get_raster_block(
                 input_dict['intensity'], block_param)
             landcover_block = dswx_sar_util.get_raster_block(
@@ -1192,7 +1189,6 @@ def fill_gap_water_bimodality_parallel(
             refland_block = dswx_sar_util.get_raster_block(
                 input_dict['ref_land'], block_param)
 
-            print('intensity', np.shape(intensity_block))
             # computes the connected components labeled image of boolean image
             # and also produces a statistics output for each label
             nb_components_water, output_water, stats_water, _ = \
@@ -1235,7 +1231,8 @@ def fill_gap_water_bimodality_parallel(
                     sub_x_start = bbox_x - margin
                     sub_x_end = bbox_x + bbox_w + margin + 1
                     sub_y_start = bbox_y - margin + block_param.read_start_line
-                    sub_y_end = bbox_y + bbox_h + margin + 1  + block_param.read_start_line
+                    sub_y_end = bbox_y + bbox_h + \
+                        margin + 1 + block_param.read_start_line
 
                     # Adjust the bounds to be within the valid range
                     sub_x_start = np.maximum(sub_x_start, 0)
@@ -1245,11 +1242,17 @@ def fill_gap_water_bimodality_parallel(
 
                     size = sizes[ind]
                     index_set.append(ind)
-                    component_data[ind] = (ind, size, [sub_x_start, sub_x_end, sub_y_start, sub_y_end])
+                    component_data[ind] = (ind,
+                                           size,
+                                           [sub_x_start,
+                                            sub_x_end,
+                                            sub_y_start,
+                                            sub_y_end])
 
             for pol_ind, pol in enumerate(pol_list):
                 if pol in ['VV', 'VH', 'HH', 'HV']:
-                    logger.info(f'filling bright water bodies with bimodality using {pol}')
+                    logger.info(
+                        f'filling bright water bodies with bimodality using {pol}')
                     bimodality_output = np.zeros([len(sizes)], dtype='byte')
                     check_output = np.ones([len(sizes)], dtype='byte')
 
@@ -1263,38 +1266,43 @@ def fill_gap_water_bimodality_parallel(
                         refland_block,
                         pol_ind,
                         threshold,
-                        block_param.read_start_line, 
+                        block_param.read_start_line,
                         block_param.block_length) for i in component_data.keys()]
 
                 with Parallel(n_jobs=number_workers) as parallel:
-                    results = parallel(delayed(process_bright_water_component)(args) for args in args_list)
-                
+                    results = parallel(
+                        delayed(process_bright_water_component)(args)
+                        for args in args_list)
+
                 for res in results:
                     bt_value, ad_value, result_ind = res
                     bimodality_bright_water = \
                         (bt_value < threshold[0]) | \
                         (ad_value < threshold[1])
                     bimodality_output[result_ind] = bimodality_bright_water
+
                     # To avoid the duplicated jobs,
                     # the checked compoenents is recorded.
                     check_output[result_ind] = 0
-                # del intensity_block, refland_block, landcover_block
 
                 output_water = np.array(output_water, dtype=output_water_type)
 
                 old_val = np.arange(1, nb_components_water + 1) - .1
-                index_array_to_image = np.array(np.searchsorted(old_val, output_water),
+                index_array_to_image = np.array(np.searchsorted(old_val,
+                                                                output_water),
                                                 dtype=output_water_type)
-                bimodality_output =  np.insert(bimodality_output, 0, 0, axis=0)
+                bimodality_output = np.insert(bimodality_output, 0, 0, axis=0)
                 check_output = np.insert(check_output, 0, 0, axis=0)
 
-                bimodality_image = np.array(bimodality_output[index_array_to_image], dtype='byte')
-                check_image = np.array(check_output[index_array_to_image], dtype='byte')
+                bimodality_image = np.array(
+                    bimodality_output[index_array_to_image], dtype='byte')
+                check_image = np.array(check_output[index_array_to_image],
+                                       dtype='byte')
                 bimodality_set += bimodality_image
 
             bimodal_ad_binary = bimodality_set > 0
             # 0 value in output_water indicates the non-water
-            bimodal_ad_binary[output_water==0] = False
+            bimodal_ad_binary[output_water == 0] = False
             del bimodality_set
             gc.collect()
             dswx_sar_util.write_raster_block(
@@ -1339,8 +1347,6 @@ def fill_gap_water_bimodality_parallel(
         cog_flag=True,
         scratch_dir=outputdir)
 
-    # bimodal_ad_binary = dswx_sar_util.read_geotiff(meregd_fill_gap_layer_path)
-    # return bimodal_ad_binary==1
     return meregd_fill_gap_layer_path
 
 
@@ -1375,11 +1381,12 @@ def run(cfg):
     im_meta = dswx_sar_util.get_meta_from_tif(filt_im_str)
 
     # read the result of landcover masindex_array_to_imageg
-    water_map_tif_str =  os.path.join(outputdir,
-                                      'refine_landcover_binary_{}.tif'.format(pol_str))
+    water_map_tif_str = os.path.join(
+        outputdir, 'refine_landcover_binary_{}.tif'.format(pol_str))
 
     # read landcover map
-    landcover_map_tif_str = os.path.join(outputdir, 'interpolated_landcover.tif')
+    landcover_map_tif_str = os.path.join(
+        outputdir, 'interpolated_landcover.tif')
     landcover_map = dswx_sar_util.read_geotiff(landcover_map_tif_str)
     landcover_label = masking_with_ancillary.get_label_landcover_esa_10()
 
@@ -1390,8 +1397,9 @@ def run(cfg):
         landcover_not_water = (landcover_map != landcover_label['openSea']) &\
              (landcover_map != landcover_label['Permanent water bodies'])
     else:
-        landcover_not_water = (landcover_map != landcover_label['Permanent water bodies']) &\
-                              (landcover_map != landcover_label['No_data'])
+        landcover_not_water = \
+            (landcover_map != landcover_label['Permanent water bodies']) &\
+            (landcover_map != landcover_label['No_data'])
 
     ref_land_str = os.path.join(outputdir,
                                 f'landcover_not_water_{pol_str}.tif')
@@ -1413,8 +1421,6 @@ def run(cfg):
                        'ref_land': ref_land_str,
                        'no_data': no_data_geotiff_path}
 
-
-    # bimodal_binary = dswx_sar_util.read_geotiff(water_map_tif_str)
     # Identify waters that have not existed and
     # remove if bimodality does not exist
     bimodal_binary_path = \
@@ -1451,12 +1457,13 @@ def run(cfg):
             bright_water_path,
             pol_list,
             threshold=[bm_threshold,
-                        ashman_threshold],
+                       ashman_threshold],
             meta_info=im_meta,
             outputdir=outputdir,
             input_dict=input_file_dict,
             number_workers=number_workers,
             lines_per_block=lines_per_block)
+
     water_tif_str = os.path.join(
         outputdir, f"bimodality_output_binary_{pol_str}.tif")
     dswx_sar_util.merge_binary_layers(
