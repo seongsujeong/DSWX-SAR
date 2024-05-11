@@ -13,6 +13,7 @@ from scipy.optimize import curve_fit
 from scipy.signal import find_peaks
 from scipy.stats import norm
 from skimage.filters import threshold_multiotsu, threshold_otsu
+from dswx_sar import dual_annealing
 
 from dswx_sar import (dswx_sar_util,
                       generate_log,
@@ -23,6 +24,8 @@ from dswx_sar.dswx_runconfig import (DSWX_S1_POL_DICT,
 
 
 logger = logging.getLogger('dswx_sar')
+
+
 
 
 def convert_pow2db(intensity):
@@ -950,14 +953,17 @@ def determine_threshold(
             expected = (tau_mode_left, .5, tau_amp_left,
                         tau_mode_right, .5, tau_amp_right)
 
-            params, _ = curve_fit(bimodal,
+            '''params, _ = curve_fit(bimodal,
                                   intensity_bins,
                                   intensity_counts,
                                   expected,
                                   bounds=((-30, 0, 0.01,
                                            -30, 0, 0.01),
                                           (5, 5, 0.95,
-                                           5, 5, 0.95)))
+                                           5, 5, 0.95)))'''
+            params = dual_annealing.bimodal_fit(intensity_bins,
+                                                intensity_counts,
+                                                expected)
             if params[0] > params[3]:
                 second_mode = params[:3]
                 first_mode = params[3:]
@@ -998,7 +1004,7 @@ def determine_threshold(
             # All distributions are assumed to be in the bound
             # -35 to 5 dB, with standard deviation of 0 - 5[dB]
             # and amplitudes of 0.01 to 0.95.
-            params, _ = curve_fit(trimodal,
+            '''params, _ = curve_fit(trimodal,
                                   intensity_bins,
                                   intensity_counts,
                                   expected,
@@ -1007,7 +1013,10 @@ def determine_threshold(
                                            -35, 0, 0.01),
                                           (5, 5, 0.95,
                                            5, 5, 0.95,
-                                           5, 5, 0.95)))
+                                           5, 5, 0.95)))'''
+            params = dual_annealing.trimodal_fit(intensity_bins,
+                                                 intensity_counts,
+                                                 expected)
 
             # re-sort the order of estimated modes using amplitudes
             first_setind = 0

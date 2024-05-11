@@ -20,6 +20,8 @@ from dswx_sar import (dswx_sar_util,
 from dswx_sar.dswx_runconfig import (_get_parser,
                                      RunConfig,
                                      DSWX_S1_POL_DICT)
+from dswx_sar import dual_annealing
+
 
 logger = logging.getLogger('dswx_sar')
 
@@ -120,7 +122,7 @@ class BimodalityMetrics:
                 # mean, std, amplitude, mean, std, amplitude
                 expected = (mean_lt, std_lt, amp_lt,
                             mean_gt, std_gt, amp_gt)
-                params, _ = curve_fit(self.bimodal,
+                '''params, _ = curve_fit(self.bimodal,
                                       self.bincenter,
                                       self.prob,
                                       expected,
@@ -128,7 +130,14 @@ class BimodalityMetrics:
                                         (-30, 1e-10, 0,
                                          -30, 1e-10, 0),
                                         (5, 5, 1,
-                                         5, 5, 1)))
+                                         5, 5, 1)))'''
+                params = dual_annealing.bimodal_fit(self.bincenter,
+                                                    self.prob,
+                                                    expected,
+                                                    bounds=((-30, 1e-10, 0,
+                                                             -30, 1e-10, 0),
+                                                             (5, 5, 1,
+                                                              5, 5, 1)))
                 if params[0] > params[3]:
                     self.second_mode = params[:3]
                     self.first_mode = params[3:]
